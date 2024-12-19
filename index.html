@@ -82,6 +82,24 @@
             { "stateMutability": "view", "type": "function", "name": "MINIMUM_USD", "inputs": [], "outputs": [{ "name": "", "type": "uint256" }] }
         ];
 
+        // Price Feed details
+        const PRICE_FEED_ADDRESS = "0xfEefF7c3fB57d18C5C6Cdd71e45D2D0b4F9377bF";
+        const PRICE_FEED_ABI = [
+            {
+                "inputs": [],
+                "name": "latestRoundData",
+                "outputs": [
+                    { "internalType": "uint80", "name": "roundId", "type": "uint80" },
+                    { "internalType": "int256", "name": "answer", "type": "int256" },
+                    { "internalType": "uint256", "name": "startedAt", "type": "uint256" },
+                    { "internalType": "uint256", "name": "updatedAt", "type": "uint256" },
+                    { "internalType": "uint80", "name": "answeredInRound", "type": "uint80" }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+
         const zkSyncSepoliaConfig = {
             chainId: '0x12C', // 300 in hex
             chainName: 'zkSync Sepolia',
@@ -152,22 +170,29 @@
                 const signer = provider.getSigner();
                 const contract = new ethers.Contract(contractAddress, contractABI, signer);
 
-                // Get minimum USD amount ($5 worth of ETH)
-                const minUsdAmount = await contract.MINIMUM_USD();
+                // Get ETH price from Chainlink
+                const priceFeed = new ethers.Contract(PRICE_FEED_ADDRESS, PRICE_FEED_ABI, provider);
+                const [roundId, answer, startedAt, updatedAt, answeredInRound] = await priceFeed.latestRoundData();
+                const ethPrice = answer;
+                console.log("ETH Price from Chainlink:", ethPrice.toString());
 
-                // Calculate ETH amount needed for $5
-                // We get the price of 1 ETH first
-                const oneEthInWei = ethers.utils.parseEther("1");
-                const ethPriceInUsd = await contract.get_eth_to_usd_rate(oneEthInWei);
+                // Calculate ETH amount needed for $5.50
+                const FIVE_FIFTY = ethers.BigNumber.from(550).mul(ethers.BigNumber.from(10).pow(6));
+                const ethToSend = FIVE_FIFTY.mul(ethers.utils.parseEther("1")).div(ethPrice);
 
-                // Calculate how much ETH we need to send for $5
-                const ethToSend = minUsdAmount.mul(oneEthInWei).div(ethPriceInUsd);
+                console.log("$5.50 in Wei:", FIVE_FIFTY.toString());
+                console.log("ETH to send:", ethers.utils.formatEther(ethToSend));
+
+                // Verify the USD value we'll be sending
+                const verificationUsdValue = ethToSend.mul(ethPrice).div(ethers.utils.parseEther("1"));
+                console.log("Verification USD value:", verificationUsdValue.toString());
 
                 buttonText.textContent = "Confirm in MetaMask...";
 
-                // Send transaction
+                // Send transaction with manual gas limit
                 const tx = await contract.fund({
-                    value: ethToSend
+                    value: ethToSend,
+                    gasLimit: 100000
                 });
 
                 buttonText.textContent = "Processing...";
