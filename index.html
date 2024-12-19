@@ -22,7 +22,7 @@
         }
 
         .framer-button {
-            background-color: rgb(250, 250, 250);
+            background-color: rgb(17, 17, 17);
             border-radius: 50px;
             opacity: 1;
             cursor: pointer;
@@ -31,7 +31,7 @@
             font-family: "Inter", "Inter Placeholder", sans-serif;
             font-size: 14px;
             font-weight: 600;
-            color: rgb(17, 17, 17);
+            color: rgb(250, 250, 250);
             text-align: center;
             display: flex;
             align-items: center;
@@ -189,18 +189,15 @@
                 const ethPrice = answer;
                 console.log("ETH Price from Chainlink:", ethPrice.toString());
 
-                const FIVE_DOLLARS = ethers.BigNumber.from(500).mul(ethers.BigNumber.from(10).pow(6));
-                let ethToSend = FIVE_DOLLARS.mul(ethers.utils.parseEther("1")).div(ethPrice);
-                // Add 10% to the ETH amount
-                ethToSend = ethToSend.mul(110).div(100);
+                const SEVEN_DOLLARS = ethers.BigNumber.from(700).mul(ethers.BigNumber.from(10).pow(7));
+                const ethToSend = SEVEN_DOLLARS.mul(ethers.utils.parseEther("1")).div(ethPrice);
+                console.log("$7 in Wei:", SEVEN_DOLLARS.toString());
+                console.log("ETH to send:", ethers.utils.formatEther(ethToSend));
 
-                console.log("$5.00 in Wei:", FIVE_DOLLARS.toString());
-                console.log("ETH to send (with buffer):", ethers.utils.formatEther(ethToSend));
-
-                // Use fixed gas limit instead of estimation
+                // Gas estimation
                 const gasPrice = await provider.getGasPrice();
-                const fixedGasLimit = 200000; // Increased from 100000
-                const gasCost = gasPrice.mul(fixedGasLimit);
+                const gasLimit = await contract.estimateGas.fund({ value: ethToSend });
+                const gasCost = gasPrice.mul(gasLimit);
 
                 // Check user balance
                 const userBalance = await provider.getBalance(accounts[0]);
@@ -214,7 +211,8 @@
 
                 const tx = await contract.fund({
                     value: ethToSend,
-                    gasLimit: fixedGasLimit
+                    gasLimit: gasLimit,
+                    gasPrice: gasPrice
                 });
 
                 buttonText.textContent = "Processing...";
