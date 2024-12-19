@@ -189,32 +189,30 @@
                 const ethPrice = answer;
                 console.log("ETH Price from Chainlink:", ethPrice.toString());
 
-                const SEVEN_DOLLARS = ethers.BigNumber.from(700).mul(ethers.BigNumber.from(10).pow(7));
+                const SEVEN_DOLLARS = ethers.BigNumber.from(700).mul(ethers.BigNumber.from(10).pow(6)); // $7.00
                 const ethToSend = SEVEN_DOLLARS.mul(ethers.utils.parseEther("1")).div(ethPrice);
+
+                console.log("Raw ETH price:", ethPrice.toString());
                 console.log("$7 in Wei:", SEVEN_DOLLARS.toString());
                 console.log("ETH to send:", ethers.utils.formatEther(ethToSend));
 
                 // Gas estimation
                 const gasPrice = await provider.getGasPrice();
-                const gasLimit = await contract.estimateGas.fund({ value: ethToSend });
-                const gasCost = gasPrice.mul(gasLimit);
+                const manualGasLimit = ethers.BigNumber.from("100000");
 
-                // Check user balance
+                // Check user balance without gas calculation
                 const userBalance = await provider.getBalance(accounts[0]);
-                if (userBalance.lt(ethToSend.add(gasCost))) {
-                    alert("Insufficient funds to cover transaction amount plus gas fees");
+                if (userBalance.lt(ethToSend)) {
+                    alert("Insufficient funds to cover transaction amount");
                     button.disabled = false;
                     return;
                 }
 
                 buttonText.textContent = "Confirm in MetaMask...";
-
                 const tx = await contract.fund({
                     value: ethToSend,
-                    gasLimit: gasLimit,
-                    gasPrice: gasPrice
+                    gasLimit: manualGasLimit  // Changed back to gasLimit
                 });
-
                 buttonText.textContent = "Processing...";
                 await tx.wait();
 
