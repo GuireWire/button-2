@@ -68,7 +68,6 @@
             <span class="checkmark" id="checkmark">✓</span>
         </div>
     </button>
-
     <script>
         function checkEthers() {
             return typeof ethers !== 'undefined';
@@ -146,13 +145,8 @@
             }
 
             try {
-                const accounts = await window.ethereum.request({
-                    method: "eth_requestAccounts"
-                });
-
-                const chainId = await window.ethereum.request({
-                    method: 'eth_chainId'
-                });
+                const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
 
                 if (chainId !== '0x12C') {
                     try {
@@ -187,23 +181,24 @@
 
                 const [roundId, answer, startedAt, updatedAt, answeredInRound] = await priceFeed.latestRoundData();
                 const ethPrice = answer;
+
+                // Calculations
+                const SEVEN_DOLLARS = ethers.BigNumber.from(700).mul(ethers.BigNumber.from(10).pow(6));
+                const ethToSend = SEVEN_DOLLARS.mul(ethers.utils.parseEther("1")).div(ethPrice).mul(125).div(100);
+
                 console.log("ETH Price from Chainlink:", ethPrice.toString());
-
-                const SEVEN_DOLLARS = ethers.BigNumber.from(700).mul(ethers.BigNumber.from(10).pow(6)); // $7.00
-                const ethToSend = SEVEN_DOLLARS.mul(ethers.utils.parseEther("1")).div(ethPrice);
-
-                console.log("Raw ETH price:", ethPrice.toString());
-                console.log("$7 in Wei:", SEVEN_DOLLARS.toString());
+                console.log("$9 in Wei:", SEVEN_DOLLARS.toString());
                 console.log("ETH to send:", ethers.utils.formatEther(ethToSend));
 
                 // Gas estimation
                 const gasPrice = await provider.getGasPrice();
-                const manualGasLimit = ethers.BigNumber.from("100000");
+                const gasLimit = await contract.estimateGas.fund({ value: ethToSend });
+                const gasCost = gasPrice.mul(gasLimit);
 
-                // Check user balance without gas calculation
+                // Check user balance
                 const userBalance = await provider.getBalance(accounts[0]);
-                if (userBalance.lt(ethToSend)) {
-                    alert("Insufficient funds to cover transaction amount");
+                if (userBalance.lt(ethToSend.add(gasCost))) {
+                    alert("Insufficient funds to cover transaction amount plus gas fees");
                     button.disabled = false;
                     return;
                 }
@@ -211,8 +206,10 @@
                 buttonText.textContent = "Confirm in MetaMask...";
                 const tx = await contract.fund({
                     value: ethToSend,
-                    gasLimit: manualGasLimit  // Changed back to gasLimit
+                    gasLimit: gasLimit,
+                    gasPrice: gasPrice
                 });
+
                 buttonText.textContent = "Processing...";
                 await tx.wait();
 
