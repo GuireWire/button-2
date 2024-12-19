@@ -49,13 +49,13 @@
         }
 
         .success {
-            background-color: #ecfdf5;
-            color: #059669;
+            background-color: #059669;
+            color: #ecfdf5;
         }
 
         .checkmark {
             display: none;
-            color: #059669;
+            color: #ecfdf5;
             font-size: 18px;
         }
     </style>
@@ -74,15 +74,31 @@
             return typeof ethers !== 'undefined';
         }
 
-        // Contract details
         const contractAddress = "0xFc2B6Ab7a9f6CC3Bc671Eed34d0d40A4AAb78958";
         const contractABI = [
-            { "stateMutability": "payable", "type": "function", "name": "fund", "inputs": [], "outputs": [] },
-            { "stateMutability": "view", "type": "function", "name": "get_eth_to_usd_rate", "inputs": [{ "name": "eth_amount", "type": "uint256" }], "outputs": [{ "name": "", "type": "uint256" }] },
-            { "stateMutability": "view", "type": "function", "name": "MINIMUM_USD", "inputs": [], "outputs": [{ "name": "", "type": "uint256" }] }
+            {
+                "stateMutability": "payable",
+                "type": "function",
+                "name": "fund",
+                "inputs": [],
+                "outputs": []
+            },
+            {
+                "stateMutability": "view",
+                "type": "function",
+                "name": "get_eth_to_usd_rate",
+                "inputs": [{ "name": "eth_amount", "type": "uint256" }],
+                "outputs": [{ "name": "", "type": "uint256" }]
+            },
+            {
+                "stateMutability": "view",
+                "type": "function",
+                "name": "MINIMUM_USD",
+                "inputs": [],
+                "outputs": [{ "name": "", "type": "uint256" }]
+            }
         ];
 
-        // Price Feed details
         const PRICE_FEED_ADDRESS = "0xfEefF7c3fB57d18C5C6Cdd71e45D2D0b4F9377bF";
         const PRICE_FEED_ABI = [
             {
@@ -101,7 +117,7 @@
         ];
 
         const zkSyncSepoliaConfig = {
-            chainId: '0x12C', // 300 in hex
+            chainId: '0x12C',
             chainName: 'zkSync Sepolia',
             nativeCurrency: {
                 name: 'ETH',
@@ -130,22 +146,21 @@
             }
 
             try {
-                // Request account access
                 const accounts = await window.ethereum.request({
                     method: "eth_requestAccounts"
                 });
 
-                // Check network
-                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-                if (chainId !== '0x12C') { // zkSync Sepolia
+                const chainId = await window.ethereum.request({
+                    method: 'eth_chainId'
+                });
+
+                if (chainId !== '0x12C') {
                     try {
-                        // First try to switch to the network
                         await window.ethereum.request({
                             method: 'wallet_switchEthereumChain',
                             params: [{ chainId: '0x12C' }],
                         });
                     } catch (switchError) {
-                        // If network doesn't exist, add it
                         if (switchError.code === 4902) {
                             try {
                                 await window.ethereum.request({
@@ -165,47 +180,50 @@
                     }
                 }
 
-                // Create ethers provider and contract instance
                 const provider = new ethers.providers.Web3Provider(window.ethereum);
                 const signer = provider.getSigner();
                 const contract = new ethers.Contract(contractAddress, contractABI, signer);
-
-                // Get ETH price from Chainlink
                 const priceFeed = new ethers.Contract(PRICE_FEED_ADDRESS, PRICE_FEED_ABI, provider);
+
                 const [roundId, answer, startedAt, updatedAt, answeredInRound] = await priceFeed.latestRoundData();
                 const ethPrice = answer;
                 console.log("ETH Price from Chainlink:", ethPrice.toString());
 
-                // Calculate ETH amount needed for $5.50
-                const FIVE_FIFTY = ethers.BigNumber.from(550).mul(ethers.BigNumber.from(10).pow(6));
-                const ethToSend = FIVE_FIFTY.mul(ethers.utils.parseEther("1")).div(ethPrice);
+                const FIVE_DOLLARS = ethers.BigNumber.from(500).mul(ethers.BigNumber.from(10).pow(6));
+                let ethToSend = FIVE_DOLLARS.mul(ethers.utils.parseEther("1")).div(ethPrice);
+                // Add 10% to the ETH amount
+                ethToSend = ethToSend.mul(110).div(100);
 
-                console.log("$5.50 in Wei:", FIVE_FIFTY.toString());
-                console.log("ETH to send:", ethers.utils.formatEther(ethToSend));
+                console.log("$5.00 in Wei:", FIVE_DOLLARS.toString());
+                console.log("ETH to send (with buffer):", ethers.utils.formatEther(ethToSend));
 
-                // Verify the USD value we'll be sending
-                const verificationUsdValue = ethToSend.mul(ethPrice).div(ethers.utils.parseEther("1"));
-                console.log("Verification USD value:", verificationUsdValue.toString());
+                // Use fixed gas limit instead of estimation
+                const gasPrice = await provider.getGasPrice();
+                const fixedGasLimit = 200000; // Increased from 100000
+                const gasCost = gasPrice.mul(fixedGasLimit);
+
+                // Check user balance
+                const userBalance = await provider.getBalance(accounts[0]);
+                if (userBalance.lt(ethToSend.add(gasCost))) {
+                    alert("Insufficient funds to cover transaction amount plus gas fees");
+                    button.disabled = false;
+                    return;
+                }
 
                 buttonText.textContent = "Confirm in MetaMask...";
 
-                // Send transaction with manual gas limit
                 const tx = await contract.fund({
                     value: ethToSend,
-                    gasLimit: 100000
+                    gasLimit: fixedGasLimit
                 });
 
                 buttonText.textContent = "Processing...";
-
-                // Wait for transaction to be mined
                 await tx.wait();
 
-                // Update button to show success state
                 button.classList.add('success');
                 buttonText.textContent = "Thank You!";
                 checkmark.style.display = 'inline-block';
 
-                // Reset button after 5 seconds
                 setTimeout(() => {
                     button.classList.remove('success');
                     buttonText.textContent = "Buy 1 Coffee";
@@ -221,7 +239,6 @@
             }
         }
 
-        // Listen for network changes
         if (window.ethereum) {
             window.ethereum.on('chainChanged', (chainId) => {
                 if (chainId !== '0x12C') {
